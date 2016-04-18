@@ -1,0 +1,275 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html lang="en">
+<head>
+<title>Source code</title>
+<link rel="stylesheet" type="text/css" href="../../../../../stylesheet.css" title="Style">
+</head>
+<body>
+<div class="sourceContainer">
+<pre><span class="sourceLineNo">001</span>/*<a name="line.1"></a>
+<span class="sourceLineNo">002</span> * Trident - A Multithreaded Server Alternative<a name="line.2"></a>
+<span class="sourceLineNo">003</span> * Copyright 2014 The TridentSDK Team<a name="line.3"></a>
+<span class="sourceLineNo">004</span> *<a name="line.4"></a>
+<span class="sourceLineNo">005</span> * Licensed under the Apache License, Version 2.0 (the "License");<a name="line.5"></a>
+<span class="sourceLineNo">006</span> * you may not use this file except in compliance with the License.<a name="line.6"></a>
+<span class="sourceLineNo">007</span> * You may obtain a copy of the License at<a name="line.7"></a>
+<span class="sourceLineNo">008</span> *<a name="line.8"></a>
+<span class="sourceLineNo">009</span> *    http://www.apache.org/licenses/LICENSE-2.0<a name="line.9"></a>
+<span class="sourceLineNo">010</span> *<a name="line.10"></a>
+<span class="sourceLineNo">011</span> * Unless required by applicable law or agreed to in writing, software<a name="line.11"></a>
+<span class="sourceLineNo">012</span> * distributed under the License is distributed on an "AS IS" BASIS,<a name="line.12"></a>
+<span class="sourceLineNo">013</span> * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.<a name="line.13"></a>
+<span class="sourceLineNo">014</span> * See the License for the specific language governing permissions and<a name="line.14"></a>
+<span class="sourceLineNo">015</span> * limitations under the License.<a name="line.15"></a>
+<span class="sourceLineNo">016</span> */<a name="line.16"></a>
+<span class="sourceLineNo">017</span><a name="line.17"></a>
+<span class="sourceLineNo">018</span>package net.tridentsdk.server.plugin;<a name="line.18"></a>
+<span class="sourceLineNo">019</span><a name="line.19"></a>
+<span class="sourceLineNo">020</span>import com.google.common.collect.Collections2;<a name="line.20"></a>
+<span class="sourceLineNo">021</span>import com.google.common.collect.ForwardingCollection;<a name="line.21"></a>
+<span class="sourceLineNo">022</span>import com.google.common.collect.ImmutableSet;<a name="line.22"></a>
+<span class="sourceLineNo">023</span>import com.google.common.collect.Sets;<a name="line.23"></a>
+<span class="sourceLineNo">024</span>import net.tridentsdk.Console;<a name="line.24"></a>
+<span class="sourceLineNo">025</span>import net.tridentsdk.Trident;<a name="line.25"></a>
+<span class="sourceLineNo">026</span>import net.tridentsdk.entity.living.Player;<a name="line.26"></a>
+<span class="sourceLineNo">027</span>import net.tridentsdk.meta.MessageBuilder;<a name="line.27"></a>
+<span class="sourceLineNo">028</span>import net.tridentsdk.plugin.Plugin;<a name="line.28"></a>
+<span class="sourceLineNo">029</span>import net.tridentsdk.plugin.PluginLoadException;<a name="line.29"></a>
+<span class="sourceLineNo">030</span>import net.tridentsdk.plugin.annotation.CommandDesc;<a name="line.30"></a>
+<span class="sourceLineNo">031</span>import net.tridentsdk.plugin.cmd.Command;<a name="line.31"></a>
+<span class="sourceLineNo">032</span>import net.tridentsdk.plugin.cmd.CommandIssuer;<a name="line.32"></a>
+<span class="sourceLineNo">033</span>import net.tridentsdk.plugin.cmd.Commands;<a name="line.33"></a>
+<span class="sourceLineNo">034</span>import net.tridentsdk.server.concurrent.TickSync;<a name="line.34"></a>
+<span class="sourceLineNo">035</span>import net.tridentsdk.util.TridentLogger;<a name="line.35"></a>
+<span class="sourceLineNo">036</span><a name="line.36"></a>
+<span class="sourceLineNo">037</span>import java.util.Collection;<a name="line.37"></a>
+<span class="sourceLineNo">038</span>import java.util.Map;<a name="line.38"></a>
+<span class="sourceLineNo">039</span>import java.util.Set;<a name="line.39"></a>
+<span class="sourceLineNo">040</span>import java.util.concurrent.ConcurrentHashMap;<a name="line.40"></a>
+<span class="sourceLineNo">041</span>import java.util.stream.Collectors;<a name="line.41"></a>
+<span class="sourceLineNo">042</span><a name="line.42"></a>
+<span class="sourceLineNo">043</span>/**<a name="line.43"></a>
+<span class="sourceLineNo">044</span> * Handles commands passed from the server<a name="line.44"></a>
+<span class="sourceLineNo">045</span> *<a name="line.45"></a>
+<span class="sourceLineNo">046</span> * @author The TridentSDK Team<a name="line.46"></a>
+<span class="sourceLineNo">047</span> * @since 0.4-alpha<a name="line.47"></a>
+<span class="sourceLineNo">048</span> */<a name="line.48"></a>
+<span class="sourceLineNo">049</span>public class CommandHandler extends ForwardingCollection&lt;Command&gt; implements Commands {<a name="line.49"></a>
+<span class="sourceLineNo">050</span>    // TODO: Make this a dictionary tree for fast lookup<a name="line.50"></a>
+<span class="sourceLineNo">051</span>    private final Map&lt;String, CommandData&gt; commands = new ConcurrentHashMap&lt;&gt;();<a name="line.51"></a>
+<span class="sourceLineNo">052</span><a name="line.52"></a>
+<span class="sourceLineNo">053</span>    public CommandHandler() {<a name="line.53"></a>
+<span class="sourceLineNo">054</span>        if (!Trident.isTrident())<a name="line.54"></a>
+<span class="sourceLineNo">055</span>            throw new RuntimeException(new IllegalAccessException("Only TridentSDK is allowed to make a new command handler"));<a name="line.55"></a>
+<span class="sourceLineNo">056</span>    }<a name="line.56"></a>
+<span class="sourceLineNo">057</span><a name="line.57"></a>
+<span class="sourceLineNo">058</span>    @Override<a name="line.58"></a>
+<span class="sourceLineNo">059</span>    protected Collection&lt;Command&gt; delegate() {<a name="line.59"></a>
+<span class="sourceLineNo">060</span>        return ImmutableSet.copyOf(Collections2.transform(commands.values(), CommandData::command));<a name="line.60"></a>
+<span class="sourceLineNo">061</span>    }<a name="line.61"></a>
+<span class="sourceLineNo">062</span><a name="line.62"></a>
+<span class="sourceLineNo">063</span>    @Override<a name="line.63"></a>
+<span class="sourceLineNo">064</span>    public void handle(final String message, final CommandIssuer issuer) {<a name="line.64"></a>
+<span class="sourceLineNo">065</span>        if (message.isEmpty()) {<a name="line.65"></a>
+<span class="sourceLineNo">066</span>            return;<a name="line.66"></a>
+<span class="sourceLineNo">067</span>        }<a name="line.67"></a>
+<span class="sourceLineNo">068</span><a name="line.68"></a>
+<span class="sourceLineNo">069</span>        final String[] contents = message.split(" ");<a name="line.69"></a>
+<span class="sourceLineNo">070</span>        final String label = contents[0].toLowerCase();<a name="line.70"></a>
+<span class="sourceLineNo">071</span>        final String args = message.substring(label.length() + (message.contains(" ") ? 1 : 0));<a name="line.71"></a>
+<span class="sourceLineNo">072</span>        final Set&lt;CommandData&gt; cmdData = findCommand(label);<a name="line.72"></a>
+<span class="sourceLineNo">073</span><a name="line.73"></a>
+<span class="sourceLineNo">074</span>        if (!cmdData.isEmpty()) {<a name="line.74"></a>
+<span class="sourceLineNo">075</span>            TickSync.sync(() -&gt; {<a name="line.75"></a>
+<span class="sourceLineNo">076</span>                for (CommandData data : cmdData) {<a name="line.76"></a>
+<span class="sourceLineNo">077</span>                    handle(data.command(), issuer, args, contents, data);<a name="line.77"></a>
+<span class="sourceLineNo">078</span>                }<a name="line.78"></a>
+<span class="sourceLineNo">079</span>            });<a name="line.79"></a>
+<span class="sourceLineNo">080</span>        } else {<a name="line.80"></a>
+<span class="sourceLineNo">081</span>            // Command not found<a name="line.81"></a>
+<span class="sourceLineNo">082</span>            if(issuer instanceof Player){<a name="line.82"></a>
+<span class="sourceLineNo">083</span>                issuer.sendRaw(new MessageBuilder("Command not found").build().asJson());<a name="line.83"></a>
+<span class="sourceLineNo">084</span>            }else{<a name="line.84"></a>
+<span class="sourceLineNo">085</span>                issuer.sendRaw("Command not found");<a name="line.85"></a>
+<span class="sourceLineNo">086</span>            }<a name="line.86"></a>
+<span class="sourceLineNo">087</span>        }<a name="line.87"></a>
+<span class="sourceLineNo">088</span>    }<a name="line.88"></a>
+<span class="sourceLineNo">089</span><a name="line.89"></a>
+<span class="sourceLineNo">090</span>    private Set&lt;CommandData&gt; findCommand(String label) {<a name="line.90"></a>
+<span class="sourceLineNo">091</span>        Set&lt;CommandData&gt; dataSet = Sets.newHashSet();<a name="line.91"></a>
+<span class="sourceLineNo">092</span>        CommandData data = commands.get(label);<a name="line.92"></a>
+<span class="sourceLineNo">093</span><a name="line.93"></a>
+<span class="sourceLineNo">094</span>        if (data != null) {<a name="line.94"></a>
+<span class="sourceLineNo">095</span>            dataSet.add(data);<a name="line.95"></a>
+<span class="sourceLineNo">096</span>        }<a name="line.96"></a>
+<span class="sourceLineNo">097</span><a name="line.97"></a>
+<span class="sourceLineNo">098</span>        dataSet.addAll(commands.values().stream().filter(d -&gt; d.hasAlias(label)).collect(Collectors.toList()));<a name="line.98"></a>
+<span class="sourceLineNo">099</span><a name="line.99"></a>
+<span class="sourceLineNo">100</span>        return dataSet;<a name="line.100"></a>
+<span class="sourceLineNo">101</span>    }<a name="line.101"></a>
+<span class="sourceLineNo">102</span><a name="line.102"></a>
+<span class="sourceLineNo">103</span>    private void handle(Command cmd, CommandIssuer issuer, String args, String[] contents, CommandData data) {<a name="line.103"></a>
+<span class="sourceLineNo">104</span>        if (!issuer.ownsPermission(data.permission)) {<a name="line.104"></a>
+<span class="sourceLineNo">105</span>            issuer.sendRaw(new MessageBuilder("You do not have permission").build().asJson());<a name="line.105"></a>
+<span class="sourceLineNo">106</span>            return;<a name="line.106"></a>
+<span class="sourceLineNo">107</span>        }<a name="line.107"></a>
+<span class="sourceLineNo">108</span><a name="line.108"></a>
+<span class="sourceLineNo">109</span>        if (issuer instanceof Player)<a name="line.109"></a>
+<span class="sourceLineNo">110</span>            cmd.handlePlayer((Player) issuer, args, contents[0]);<a name="line.110"></a>
+<span class="sourceLineNo">111</span>        else if (issuer instanceof Console)<a name="line.111"></a>
+<span class="sourceLineNo">112</span>            cmd.handleConsole((Console) issuer, args, contents[0]);<a name="line.112"></a>
+<span class="sourceLineNo">113</span><a name="line.113"></a>
+<span class="sourceLineNo">114</span>        cmd.handle(issuer, args, contents[0]);<a name="line.114"></a>
+<span class="sourceLineNo">115</span>    }<a name="line.115"></a>
+<span class="sourceLineNo">116</span><a name="line.116"></a>
+<span class="sourceLineNo">117</span>    @Override<a name="line.117"></a>
+<span class="sourceLineNo">118</span>    public int register(Plugin plugin, Command command) {<a name="line.118"></a>
+<span class="sourceLineNo">119</span>        CommandDesc description = command.getClass().getAnnotation(CommandDesc.class);<a name="line.119"></a>
+<span class="sourceLineNo">120</span><a name="line.120"></a>
+<span class="sourceLineNo">121</span>        if (description == null) {<a name="line.121"></a>
+<span class="sourceLineNo">122</span>            TridentLogger.get().error(new PluginLoadException(<a name="line.122"></a>
+<span class="sourceLineNo">123</span>                    "Error in registering commands: Class does not have annotation " + "\"CommandDesc\"!"));<a name="line.123"></a>
+<span class="sourceLineNo">124</span>            return 0;<a name="line.124"></a>
+<span class="sourceLineNo">125</span>        }<a name="line.125"></a>
+<span class="sourceLineNo">126</span><a name="line.126"></a>
+<span class="sourceLineNo">127</span>        String name = description.name();<a name="line.127"></a>
+<span class="sourceLineNo">128</span>        int priority = description.priority();<a name="line.128"></a>
+<span class="sourceLineNo">129</span>        String[] aliases = description.aliases();<a name="line.129"></a>
+<span class="sourceLineNo">130</span>        String permission = description.permission();<a name="line.130"></a>
+<span class="sourceLineNo">131</span><a name="line.131"></a>
+<span class="sourceLineNo">132</span>        if (name == null || "".equals(name)) {<a name="line.132"></a>
+<span class="sourceLineNo">133</span>            TridentLogger.get().error(new PluginLoadException("cmd does not declare a valid name!"));<a name="line.133"></a>
+<span class="sourceLineNo">134</span>            return 0;<a name="line.134"></a>
+<span class="sourceLineNo">135</span>        }<a name="line.135"></a>
+<span class="sourceLineNo">136</span><a name="line.136"></a>
+<span class="sourceLineNo">137</span>        String lowerCase = name.toLowerCase();<a name="line.137"></a>
+<span class="sourceLineNo">138</span>        CommandData data = commands.get(lowerCase);<a name="line.138"></a>
+<span class="sourceLineNo">139</span>        CommandData newData = new CommandData(name, priority, aliases, permission, command, plugin);<a name="line.139"></a>
+<span class="sourceLineNo">140</span><a name="line.140"></a>
+<span class="sourceLineNo">141</span>        if (data != null) {<a name="line.141"></a>
+<span class="sourceLineNo">142</span>            if (commands.get(lowerCase).priority() &gt; priority) {<a name="line.142"></a>
+<span class="sourceLineNo">143</span>                // put the new, more important cmd in place and notify the old cmd that it has been overridden<a name="line.143"></a>
+<span class="sourceLineNo">144</span>                commands.put(lowerCase, newData).command().notifyOverriden();<a name="line.144"></a>
+<span class="sourceLineNo">145</span>            } else {<a name="line.145"></a>
+<span class="sourceLineNo">146</span>                // don't register this cmd and notify it has been overridden<a name="line.146"></a>
+<span class="sourceLineNo">147</span>                command.notifyOverriden();<a name="line.147"></a>
+<span class="sourceLineNo">148</span>            }<a name="line.148"></a>
+<span class="sourceLineNo">149</span>        } else {<a name="line.149"></a>
+<span class="sourceLineNo">150</span>            commands.put(name, newData);<a name="line.150"></a>
+<span class="sourceLineNo">151</span>        }<a name="line.151"></a>
+<span class="sourceLineNo">152</span><a name="line.152"></a>
+<span class="sourceLineNo">153</span>        // TODO: return something meaningful<a name="line.153"></a>
+<span class="sourceLineNo">154</span>        return 0;<a name="line.154"></a>
+<span class="sourceLineNo">155</span>    }<a name="line.155"></a>
+<span class="sourceLineNo">156</span><a name="line.156"></a>
+<span class="sourceLineNo">157</span>    @Override<a name="line.157"></a>
+<span class="sourceLineNo">158</span>    public void unregister(Class&lt;? extends Command&gt; cls) {<a name="line.158"></a>
+<span class="sourceLineNo">159</span>        commands.entrySet().stream().filter(e -&gt; e.getValue().command().getClass().equals(cls)).forEach(e -&gt; commands.remove(e.getKey()));<a name="line.159"></a>
+<span class="sourceLineNo">160</span>    }<a name="line.160"></a>
+<span class="sourceLineNo">161</span><a name="line.161"></a>
+<span class="sourceLineNo">162</span>    private static class CommandData {<a name="line.162"></a>
+<span class="sourceLineNo">163</span>        private final String permission;<a name="line.163"></a>
+<span class="sourceLineNo">164</span>        private final int priority;<a name="line.164"></a>
+<span class="sourceLineNo">165</span>        private final String[] aliases;<a name="line.165"></a>
+<span class="sourceLineNo">166</span>        private final String name;<a name="line.166"></a>
+<span class="sourceLineNo">167</span>        private final Command encapsulated;<a name="line.167"></a>
+<span class="sourceLineNo">168</span>        private final Plugin plugin;<a name="line.168"></a>
+<span class="sourceLineNo">169</span><a name="line.169"></a>
+<span class="sourceLineNo">170</span>        public CommandData(String name, int priority, String[] aliases, String permission, Command command,<a name="line.170"></a>
+<span class="sourceLineNo">171</span>                           Plugin plugin) {<a name="line.171"></a>
+<span class="sourceLineNo">172</span>            this.priority = priority;<a name="line.172"></a>
+<span class="sourceLineNo">173</span>            this.name = name;<a name="line.173"></a>
+<span class="sourceLineNo">174</span>            this.aliases = aliases;<a name="line.174"></a>
+<span class="sourceLineNo">175</span>            this.permission = permission;<a name="line.175"></a>
+<span class="sourceLineNo">176</span>            this.encapsulated = command;<a name="line.176"></a>
+<span class="sourceLineNo">177</span>            this.plugin = plugin;<a name="line.177"></a>
+<span class="sourceLineNo">178</span>        }<a name="line.178"></a>
+<span class="sourceLineNo">179</span><a name="line.179"></a>
+<span class="sourceLineNo">180</span>        public Command command() {<a name="line.180"></a>
+<span class="sourceLineNo">181</span>            return this.encapsulated;<a name="line.181"></a>
+<span class="sourceLineNo">182</span>        }<a name="line.182"></a>
+<span class="sourceLineNo">183</span><a name="line.183"></a>
+<span class="sourceLineNo">184</span>        public boolean hasAlias(String alias) {<a name="line.184"></a>
+<span class="sourceLineNo">185</span>            if (name.equals(alias)) return true;<a name="line.185"></a>
+<span class="sourceLineNo">186</span><a name="line.186"></a>
+<span class="sourceLineNo">187</span>            for (String string : this.aliases) {<a name="line.187"></a>
+<span class="sourceLineNo">188</span>                if (alias.equalsIgnoreCase(string)) {<a name="line.188"></a>
+<span class="sourceLineNo">189</span>                    return true;<a name="line.189"></a>
+<span class="sourceLineNo">190</span>                }<a name="line.190"></a>
+<span class="sourceLineNo">191</span>            }<a name="line.191"></a>
+<span class="sourceLineNo">192</span>            return false;<a name="line.192"></a>
+<span class="sourceLineNo">193</span>        }<a name="line.193"></a>
+<span class="sourceLineNo">194</span><a name="line.194"></a>
+<span class="sourceLineNo">195</span>        public int priority() {<a name="line.195"></a>
+<span class="sourceLineNo">196</span>            return this.priority;<a name="line.196"></a>
+<span class="sourceLineNo">197</span>        }<a name="line.197"></a>
+<span class="sourceLineNo">198</span><a name="line.198"></a>
+<span class="sourceLineNo">199</span>        public Plugin plugin() {<a name="line.199"></a>
+<span class="sourceLineNo">200</span>            return plugin;<a name="line.200"></a>
+<span class="sourceLineNo">201</span>        }<a name="line.201"></a>
+<span class="sourceLineNo">202</span>    }<a name="line.202"></a>
+<span class="sourceLineNo">203</span>}<a name="line.203"></a>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</pre>
+</div>
+</body>
+</html>
